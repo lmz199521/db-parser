@@ -1,0 +1,84 @@
+# 构建并部署到 GitHub Pages
+#
+# 这个文件是给「fork 了本项目、想直接上线」的人准备的：
+#   1. fork 仓库
+#   2. Settings → Pages → Source 选 "GitHub Actions"
+#   3. push 到 main（或手动 Run workflow）
+#   就完事了 —— 不需要改任何一行配置，也不用改 vite.config.ts。
+#
+# 为什么不用 base 路径配置：
+#   vite.config.ts 里 base 是 './'（相对路径），构建产物里没有写死域名，
+#   所以挂在 https://<用户名>.github.io/<仓库名>/ 这种子路径下也能正常加载资源。
+#
+# ⚠️ 唯一建议手动改的地方：index.html 里的 canonical / og:url 绝对地址
+#    （文件里留了注释位置）。不改也能跑，只是分享到社交平台时缩略图链接会不对。
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 允许在 Actions 页面手动点一下重跑，方便调试
+  workflow_dispatch:
+
+# 部署到 Pages 需要的权限，一个都不能少：
+#   contents: read  —— 读仓库
+#   pages: write    —— 写 Pages
+#   id-token: write —— OIDC 令牌，upload/deploy-pages 用它认证
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一个 Pages 部署在跑。
+# cancel-in-progress 刻意设为 false：宁可排队，也不要把正在发布的产物中断，
+# 否则线上可能停留在"一半新一半旧"的状态。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      # check = typecheck + 引擎 79 项断言 + vite build
+      #
+      # 这里刻意**不**跑浏览器端 84 项断言：那需要再装一份 Chromium，
+      # 给一次简单的静态站部署增加几分钟。完整的 check:all 交给 CI 工作流
+      # （见 README「测试方案 → CI 接线」），部署这条链路只求"构建是好的"。
+      #
+      # 也刻意**不**单独写 make-testdata：仓库里没有 sample.sqlite（它是生成物），
+      # build 的 prebuild 钩子会在构建前自动生成它和 sql.js 的 wasm。
+      - name: 类型检查 + 引擎回归 + 构建
+        run: npm run check
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      # 上传 dist/ 这个目录 —— 注意 action 会自动处理为 Pages 需要的 artifact 格式，
+      # 不要自己 tar 或者上传整个仓库（仓库根的 docs/ 是设计文档，不是站点）。
+      - name: 上传产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

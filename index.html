@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>数据库放大镜 · 拖入文件，看懂你的数据库</title>
+    <meta
+      name="description"
+      content="把 SQLite / .db 数据库文件拖进浏览器，自动分析所有表、字段、主外键关系与 JSON 字段并可视化呈现，JSON 字段可折叠成节点树逐层查看。文件不上传，全程本地解析。"
+    />
+    <!--
+      theme-color 决定移动端浏览器地址栏的颜色。
+
+      这里只保留**一个** meta（不带 media），由下面那段内联脚本按最终主题写入。
+      不用「两条带 media 的 meta」的原因：用户的**手动选择**可能和系统偏好相反
+      （系统是暗色、用户手动切成了亮色），带 media 的那两条会一直按系统偏好生效，
+      切完主题地址栏还是错的；而且 JS 只能改到 querySelector 命中的第一条，
+      两条之间会互相打架。单条 + JS 同步没有这个问题。
+      默认值取 styles.css 的 --canvas 亮色值。
+    -->
+    <meta name="theme-color" content="#f4f6f9" />
+    <!--
+      color-scheme 不在这里声明，而是写在 styles.css 的 :root / :root[data-theme='dark'] 里。
+      放在这里只能跟系统的 prefers-color-scheme 走，会跟用户手动选过的主题打架。
+    -->
+    <!--
+      内联 SVG 图标：不额外请求文件，也就不会再有 /favicon.ico 404
+      （浏览器默认会去要 favicon.ico，没有就每次加载都白跑一次 404）。
+
+      路径里的 # 必须写成 %23，否则会被当成 URL 的 fragment 截断。
+      图形与界面左上角的品牌标记同源：品牌渐变圆角方块 + 白色数据库柱体。
+    -->
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='.45' stop-color='%234f46e5'/%3E%3Cstop offset='1' stop-color='%2306b6d4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'%3E%3Cellipse cx='16' cy='10' rx='6.6' ry='2.7'/%3E%3Cpath d='M9.4 10v12c0 1.5 2.95 2.7 6.6 2.7s6.6-1.2 6.6-2.7V10'/%3E%3Cpath d='M9.4 15.9c0 1.5 2.95 2.7 6.6 2.7s6.6-1.2 6.6-2.7'/%3E%3C/g%3E%3C/svg%3E"
+    />
+    <!--
+      canonical / og:url 必须是绝对地址。下面填的是 GitHub Pages 的默认地址
+      （仓库 lmz199521/db-parser）。
+
+      ⚠️ 换成自有域名时，这两处要一起改 —— canonical 指错等于告诉搜索引擎
+      "正式版本在别的地址"，是负优化，比不写还糟。
+
+      注意 href 不要写 "./" —— Vite 会把目录当静态资源去读，构建直接报 EISDIR。
+    -->
+    <link rel="canonical" href="https://lmz199521.github.io/db-parser/" />
+    <meta property="og:url" content="https://lmz199521.github.io/db-parser/" />
+    <meta property="og:title" content="数据库放大镜" />
+    <meta
+      property="og:description"
+      content="拖入数据库文件，自动分析表结构、外键关系与 JSON 字段并可视化。纯本地解析，文件不上传。"
+    />
+    <meta property="og:type" content="website" />
+    <!--
+      twitter:card 刻意写 summary 而不是 summary_large_image：
+      后者要求页面提供 og:image，缺图时平台会静默降级，卡片高度抖动一下。
+      将来补一张 1200×630 的社交预览图并加上 <meta property="og:image"> 之后，
+      这里就可以改回 summary_large_image。
+    -->
+    <meta name="twitter:card" content="summary" />
+    <script>
+      // 在样式生效前把主题写到 <html data-theme>，避免首屏闪白/闪黑
+      (function () {
+        try {
+          var saved = localStorage.getItem('dbmagnifier.theme');
+          var theme =
+            saved === 'dark' || saved === 'light'
+              ? saved
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+          /*
+           * 顺手把地址栏颜色也定下来，免得首屏那几百毫秒里
+           * 亮色页面配着「暗色主题默认值」的深色地址栏。
+           * 取值与 styles.css 的 --canvas 一致；useTheme 之后会继续维护它。
+           */
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#0c0f18' : '#f4f6f9');
+        } catch (e) {
+          /* 读不到就用 CSS 里的默认亮色 */
+        }
+      })();
+    </script>
+    <style>
+      /* WASM 引擎加载期间的最小占位，避免白屏 */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        /* 与 styles.css 的 --canvas 对齐，避免首屏底色跳一下 */
+        background: #f4f6f9;
+      }
+      html[data-theme='dark'],
+      html[data-theme='dark'] body {
+        background: #0c0f18;
+      }
+      #boot {
+        display: grid;
+        place-items: center;
+        min-height: 60vh;
+        font: 13px/1.6 -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        /* 与 --text-3 同值：5.15:1，达标。原来的 #818b9c 只有 3.4:1 */
+        color: #656e7d;
+      }
+      #boot span {
+        display: block;
+        width: 22px;
+        height: 22px;
+        margin: 0 auto 10px;
+        border: 2px solid #d5dae3;
+        border-top-color: #5b5bd6;
+        border-radius: 50%;
+        animation: bootspin 0.8s linear infinite;
+      }
+      html[data-theme='dark'] #boot {
+        /* 与 --nav-label 同值：5.54:1。原来的 #6f7a90 只有 4.45:1，差一点点 */
+        color: #7e8aa3;
+      }
+      html[data-theme='dark'] #boot span {
+        border-color: #313a52;
+        border-top-color: #8b8bf0;
+      }
+      @keyframes bootspin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="boot"><div><span></span>正在准备界面…</div></div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

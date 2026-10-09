@@ -1,0 +1,64 @@
+# 依赖
+node_modules/
+dist/
+*.local
+
+# 环境变量（绝对不要提交任何凭据）
+.env
+.env.*
+
+# 数据库文件一律不进仓库：既避免体积，也避免泄露真实数据
+# （这条也覆盖了内置示例库 public/sample.sqlite —— 它是生成物，
+#   由 npm run make-testdata 重建，见下面「生成物」一节）
+*.db
+*.sqlite
+*.sqlite3
+*.db3
+*.sql
+*.sql.gz
+
+# ---------------------------------------------------------------------------
+# 生成物：能由脚本确定性重建的东西，一律不进仓库
+#
+#    public/sample.sqlite   ← make-testdata（种子固定的伪随机，每次内容一致）
+#    public/sample.json     ← make-testdata
+#    public/sql-wasm.wasm   ← sync:wasm（从 node_modules/sql.js 拷贝）
+#
+# 为什么不留一份在仓库里：
+#   提交生成物等于同时维护「源码」和「产物」两份事实。改了生成脚本却忘了
+#   重新生成，仓库里就是过期数据 —— 而且**没有任何东西会报错**。
+#   这三个文件加起来 1MB，删掉也让 clone 快一点。
+#
+# 怎么保证 clone 下来直接能跑：
+#   package.json 里的 predev / prebuild / preverify 会在需要之前自动生成它们。
+#   也就是说 `npm run dev`、`npm run build`、`npm run verify` 都不用手工预处理。
+#
+# 注意：public/sample.sqlite 已被上面的 *.sqlite 覆盖，这里再写一次是为了
+#   让"它是生成物"这件事在「生成物」这一节里也是自明的，不用往上翻。
+# ---------------------------------------------------------------------------
+public/sample.sqlite
+public/sample.json
+public/sql-wasm.wasm
+
+# 本地测试数据
+test-data/
+sample/
+
+# 本地验证脚本的编译产物
+.verify/sqlite.bundle.mjs
+.verify/format.bundle.mjs
+
+# 验证脚本产出的截图与日志（落在 .verify/ 下，别提交）
+.verify/shots/
+.verify/*.log
+
+# 编辑器 / 系统
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*

@@ -1,0 +1,36 @@
+{
+  "name": "db-parser",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "数据库放大镜 —— 拖入数据库文件，自动分析表结构并以可视化界面呈现",
+  "scripts": {
+    "sync:wasm": "node scripts/copy-wasm.mjs",
+    "make-testdata": "node scripts/make-testdata.mjs",
+    "predev": "npm run sync:wasm && npm run make-testdata",
+    "dev": "vite",
+    "prebuild": "npm run sync:wasm && npm run make-testdata",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "build:verify": "esbuild src/lib/sqlite.ts --bundle --format=esm --platform=node --target=node22 --outfile=.verify/sqlite.bundle.mjs --external:sql.js --log-level=warning && esbuild src/lib/format.ts --bundle --format=esm --platform=node --target=node22 --outfile=.verify/format.bundle.mjs --log-level=warning",
+    "preverify": "npm run make-testdata",
+    "verify": "npm run build:verify && node .verify/run.mjs",
+    "check": "npm run typecheck && npm run verify && npm run build",
+    "verify:browser": "npm run build && node .verify/browser.mjs",
+    "verify:csp": "node .verify/probe-csp.mjs",
+    "check:all": "npm run check && node .verify/browser.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.14.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11"
+  }
+}

@@ -1,0 +1,31 @@
+# Docker 构建上下文排除清单
+#
+# 目标：让 `docker build` 的上下文尽量小、且不把本机私密内容带进镜像。
+# 每一行都要能说出理由，删掉任何一条之前先想清楚。
+
+# 依赖与产物：镜像里会重新安装、重新构建
+node_modules
+dist
+
+# 版本控制与验证脚本：构建用不到（.verify 里还有 45KB 脚本 + 编译产物）
+.git
+.gitignore
+.verify
+docs
+
+# 本地配置与日志
+*.log
+npm-debug.log*
+.env
+.env.*
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.local
+
+# ⚠️ 刻意**不排除** public/ ——
+#   public/sample.sqlite  是"先看看示例数据"按钮的数据来源，构建产物要带上；
+#   public/sql-wasm.wasm  是 SQLite 引擎运行时，虽然 prebuild 会重新生成，
+#                          但保留在上下文里可以让 Dockerfile 少一层依赖。
+# 也刻意**不排除** *.sqlite 之类的通配 —— 那会顺手把示例库一起排除掉。

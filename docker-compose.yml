@@ -1,0 +1,25 @@
+# 数据库放大镜 —— 一条命令起服务
+#
+#   docker compose up -d      构建并后台启动，访问 http://localhost:8080
+#   docker compose logs -f    看日志
+#   docker compose down       停掉并删除容器
+#
+# 想换端口：改下面的 "8080:80" 左边那个数字，比如 "80:80" 直接用 80 端口。
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: db-parser:latest
+    container_name: db-parser
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+    # 这里**刻意没有 volumes / environment / depends_on**，不是漏写：
+    #   * 没有持久化数据 —— 解析全在用户浏览器里完成，服务端只发静态文件，
+    #     删掉容器不丢任何东西，也不需要备份。
+    #   * 不需要环境变量 —— 纯静态站点没有配置项。
+    #   * 没有依赖服务 —— 没有后端、没有数据库。
+    # 反过来说：任何"给这个服务加个卷存点东西"的需求，都说明架构走偏了。

@@ -1,0 +1,58 @@
+# =============================================================================
+# 安全响应头 + 缓存策略（Netlify 与 Cloudflare Pages 通用格式）
+#
+# 为什么放在 public/ 而不是写在 netlify.toml 里：
+#   Vite 会把 public/ 里的文件原样拷到构建产物根目录，于是线上就有一份 /_headers。
+#   Netlify 和 Cloudflare Pages 都会**读取这个文件**并据此下发响应头 ——
+#   一份文件覆盖两个平台，少一处需要人工同步的副本。
+#
+# ⚠️ 这份是 vite.config.ts 里 SECURITY_HEADERS 的镜像，两者必须保持一致：
+#     * vite.config.ts 那份被 `npm run verify:browser` 自动验收覆盖（会真的违一次规）
+#     * 本文件是线上真正下发的那份
+#     * Nginx 用户的对应文件是 deploy/security-headers.inc
+#   改策略时这些地方要一起改。grep 一下 "default-src 'none'" 就能找全。
+#
+# 两条承载性指令（删了会坏，详细原因见 deploy/security-headers.inc）：
+#   * script-src 里的 'wasm-unsafe-eval'  → sql.js 实例化 WASM 必需，删了整站白屏
+#   * connect-src 'self' + default-src 'none' → 真正守住「文件零上传」的部分
+# =============================================================================
+#
+# 格式注意：路径块内部**不能出现空行或注释**（解析器会把它们当成本块的结束），
+# 所以下面每个块都只有纯头行，说明文字一律放在块外面。
+#
+# 为什么安全头在两个块里各写了一遍：
+#   "_headers" 规范只保证「同一块内」的语义确定，"多个块匹配时是否合并头"
+#   各家实现有差异。CSP 与 nosniff 是这套部署的核心承诺，宁可冗余也不赌实现细节。
+#
+# 关于 Cache-Control 在 /assets/* 上被覆盖：Netlify 与 Cloudflare Pages 都按
+#   「同一 header 取最具体那条规则」处理，所以上面 /assets/* 的 immutable 生效。
+#   万一某个平台改成把两条拼起来，结果也只是资源每次都回源校验（慢一点，
+#   但绝不会错），不会出现"发不出新版"这种事故 —— 这是刻意选的安全侧。
+# =============================================================================
+#
+# WCAG 无关的一条提醒：下面 /assets/* 块里的 Cache-Control 之所以能用 immutable，
+# 完全依赖"Vite 产出的文件名带内容 hash"这个前提 —— 该前提已由
+# `npm run verify:browser` 第 13 组断言钉住（含"wasm 不在 /assets/ 下"）。
+# =============================================================================
+
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=()
+  Cache-Control: no-cache
+
+# 带内容 hash 的构建产物（index-Dq7RKswK.js 这种）：可以缓存到永远。
+#
+# ⚠️ 不要写成通配的 /\.(js|css|wasm)$/ —— sql-wasm.wasm 在 public/ 下、
+#    文件名**没有 hash**。它一旦被 immutable 缓存住，升级 sql.js 之后浏览器
+#    会一直用缓存里那份旧 wasm，症状是"本机没问题、线上白屏"，极难排查。
+#    所以这里只对 /assets/* 开 immutable，其余无 hash 的资源走上面的 no-cache。
+/assets/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=()
+  Cache-Control: public, max-age=31536000, immutable

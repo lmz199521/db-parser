@@ -1,0 +1,25 @@
+# 行尾策略：仓库内、检出后，统一 LF
+#
+# 这个项目里有一批「行尾敏感」的文件，而它们的消费方全在 Linux 侧：
+#   Dockerfile                    → docker build
+#   deploy/nginx.conf             → nginx
+#   deploy/security-headers.inc   → nginx include
+#   public/_headers               → Netlify / Cloudflare Pages 的解析器
+#   scripts/*.mjs .verify/*.mjs   → Node
+#
+# 这些文件一旦带上 CRLF，就会出现「Windows 上一切正常、Linux 上诡异失败」
+# 这类最难查的问题。典型症状：
+#   * Dockerfile 里 RUN 命令莫名报错（\r 被当成命令的一部分）
+#   * _headers 只有第一个响应头生效（解析器把行尾的 \r 放进值里）
+#   * nginx 配置报 "unknown directive"（指令名后面多了个不可见字符）
+#
+# Git for Windows 默认 core.autocrlf=true，会在检出时把 LF 换成 CRLF ——
+# 正是上面那类问题的来源。所以这里不靠自动判定，直接全局钉死 eol=lf：
+# 这个仓库只有一个事实来源，就是 LF。
+* text=auto eol=lf
+
+# 将来若加入图片 / 字体等二进制资源，在这里显式声明，避免被当文本处理：
+# *.png  binary
+# *.jpg  binary
+# *.ico  binary
+# *.woff2 binary

@@ -1,0 +1,27 @@
+# Netlify 部署配置
+#
+# 有了这个文件，在 Netlify 里「Add new site → Import an existing project →
+# 选你自己的 fork」之后**什么都不用填** —— 构建命令和发布目录会自动读这里。
+#
+# 安全响应头与缓存策略**不在这里**，而在 public/_headers：
+# 那份文件会被 Vite 拷进构建产物，Netlify 会自动读取。
+# 放那里而不是放这里，是因为 Cloudflare Pages 也认 public/_headers ——
+# 一份文件覆盖两个平台，少一处需要人工同步的副本。
+
+[build]
+  # 用 `npm run check` 而不是直接 `npm run build`：
+  # check = typecheck + 引擎 79 项断言 + build。
+  # 多花几秒钟，换"类型错误和口径回归不会悄悄上线"。
+  # 示例库与 WASM 由 build 的 prebuild 钩子自动生成，不用在这里显式写。
+  # 想更快的话可以改成 "npm run build"（只构建，不跑断言）。
+  command = "npm run check"
+  publish = "dist"
+
+[build.environment]
+  # 与本地开发、GitHub Actions 保持同一个大版本，避免"本地能构建、线上不行"
+  NODE_VERSION = "22"
+
+# 说明一下这里**没有**的东西：
+#   没有 functions / edge functions —— 纯静态站点，没有后端逻辑可跑
+#   没有 redirects              —— 没有客户端路由，不需要 SPA 重写规则
+#   没有环境变量                —— 没有任何配置项，也就没有"变量配错导致 500"
